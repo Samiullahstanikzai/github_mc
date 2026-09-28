@@ -16,7 +16,28 @@ jobs:
       - name: Detect Hydrogen storefront
         id: storefront
         run: |
-          if [ -f package.json ] && [ -f package-lock.json ] && grep -q '"@shopify/hydrogen"' package.json; then
+          project_file="$(
+            find . -path '*/node_modules/*' -prune -o -name package.json -print0 |
+              xargs -0 -r grep -l '"@shopify/hydrogen"' |
+              head -n 1
+          )"
+
+          if [ -z "$project_file" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          project_dir="$(dirname "$project_file")"
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+
+          if [ -f "$project_dir/package-lock.json" ]; then
+            echo "package_manager=npm" >> "$GITHUB_OUTPUT"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ -f "$project_dir/pnpm-lock.yaml" ]; then
+            echo "package_manager=pnpm" >> "$GITHUB_OUTPUT"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ -f "$project_dir/yarn.lock" ]; then
+            echo "package_manager=yarn" >> "$GITHUB_OUTPUT"
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -30,7 +51,7 @@ jobs:
           check-latest: true
 
       - name: Cache node modules
-        if: steps.storefront.outputs.enabled == 'true'
+        if: steps.storefront.outputs.enabled == 'true' && steps.storefront.outputs.package_manager == 'npm'
         id: cache-npm
         uses: actions/cache@v4
         env:
@@ -45,14 +66,27 @@ jobs:
 
       - name: Install dependencies
         if: steps.storefront.outputs.enabled == 'true'
-        run: npm ci
+        working-directory: ${{ steps.storefront.outputs.project_dir }}
+        run: |
+          case "${{ steps.storefront.outputs.package_manager }}" in
+            npm)
+              npm ci
+              ;;
+            pnpm)
+              corepack pnpm install --frozen-lockfile
+              ;;
+            yarn)
+              corepack yarn install --immutable || corepack yarn install --frozen-lockfile
+              ;;
+          esac
 
       - name: Build and Publish to Oxygen
         if: steps.storefront.outputs.enabled == 'true'
+        working-directory: ${{ steps.storefront.outputs.project_dir }}
         run: npx shopify hydrogen deploy
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000044056 }}
 
       - name: Skip deploy for non-Hydrogen repo
         if: steps.storefront.outputs.enabled != 'true'
-        run: echo "Skipping Oxygen deployment because this repository does not contain a Hydrogen storefront with an npm lockfile."
+        run: echo "Skipping Oxygen deployment because this repository does not contain a Hydrogen storefront with a supported lockfile."
