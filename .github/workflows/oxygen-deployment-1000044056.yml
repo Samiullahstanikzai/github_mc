@@ -106,7 +106,7 @@ jobs:
               corepack pnpm exec shopify hydrogen deploy --force
               ;;
             yarn)
-              corepack yarn shopify hydrogen deploy --force
+              corepack yarn exec shopify hydrogen deploy --force
               ;;
           esac
         env:
