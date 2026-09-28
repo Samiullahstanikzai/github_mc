@@ -76,7 +76,15 @@ jobs:
               corepack pnpm install --frozen-lockfile
               ;;
             yarn)
-              corepack yarn install --immutable || corepack yarn install --frozen-lockfile
+              yarn_version="$(corepack yarn --version)"
+              case "$yarn_version" in
+                1.*)
+                  corepack yarn install --frozen-lockfile
+                  ;;
+                *)
+                  corepack yarn install --immutable
+                  ;;
+              esac
               ;;
           esac
 
