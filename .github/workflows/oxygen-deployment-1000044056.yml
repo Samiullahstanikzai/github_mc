@@ -1,0 +1,125 @@
+name: Storefront 1000044056
+on: [push]
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: Deploy to Oxygen
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect Hydrogen storefront
+        id: storefront
+        run: |
+          found=false
+
+          while IFS= read -r -d '' project_file; do
+            if ! grep -q '"@shopify/hydrogen"' "$project_file"; then
+              continue
+            fi
+
+            project_dir="$(dirname "$project_file")"
+
+            if [ -f "$project_dir/package-lock.json" ]; then
+              echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+              echo "package_manager=npm" >> "$GITHUB_OUTPUT"
+              echo "npm_lockfile_hash=$(sha256sum "$project_dir/package-lock.json" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              found=true
+              break
+            elif [ -f "$project_dir/pnpm-lock.yaml" ]; then
+              echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+              echo "package_manager=pnpm" >> "$GITHUB_OUTPUT"
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              found=true
+              break
+            elif [ -f "$project_dir/yarn.lock" ]; then
+              echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+              echo "package_manager=yarn" >> "$GITHUB_OUTPUT"
+              if grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@1(\.[0-9]+)*"' "$project_file"; then
+                echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+              elif grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@' "$project_file" || [ -f "$project_dir/.yarnrc.yml" ] || [ -d "$project_dir/.yarn/releases" ]; then
+                echo "yarn_install_mode=berry" >> "$GITHUB_OUTPUT"
+              else
+                echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+              fi
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              found=true
+              break
+            fi
+          done < <(find . -path '*/node_modules/*' -prune -o -name package.json -print0)
+
+          if [ "$found" != "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup node.js
+        if: steps.storefront.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          check-latest: true
+
+      - name: Cache node modules
+        if: steps.storefront.outputs.enabled == 'true' && steps.storefront.outputs.package_manager == 'npm'
+        id: cache-npm
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ steps.storefront.outputs.project_dir }}-${{ steps.storefront.outputs.npm_lockfile_hash }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.storefront.outputs.enabled == 'true'
+        working-directory: ${{ steps.storefront.outputs.project_dir }}
+        run: |
+          case "${{ steps.storefront.outputs.package_manager }}" in
+            npm)
+              npm ci
+              ;;
+            pnpm)
+              corepack pnpm install --frozen-lockfile
+              ;;
+            yarn)
+              case "${{ steps.storefront.outputs.yarn_install_mode }}" in
+                berry)
+                  corepack yarn install --immutable
+                  ;;
+                *)
+                  corepack yarn install --frozen-lockfile
+                  ;;
+              esac
+              ;;
+          esac
+
+      - name: Build and Publish to Oxygen
+        if: steps.storefront.outputs.enabled == 'true'
+        working-directory: ${{ steps.storefront.outputs.project_dir }}
+        run: |
+          case "${{ steps.storefront.outputs.package_manager }}" in
+            npm)
+              npm exec -- shopify hydrogen deploy --force
+              ;;
+            pnpm)
+              corepack pnpm exec shopify hydrogen deploy --force
+              ;;
+            yarn)
+              corepack yarn exec shopify hydrogen deploy --force
+              ;;
+          esac
+        env:
+          SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000044056 }}
+
+      - name: Skip deploy for non-Hydrogen repo
+        if: steps.storefront.outputs.enabled != 'true'
+        run: echo "Skipping Oxygen deployment because this repository does not contain a Hydrogen storefront with a supported lockfile."
