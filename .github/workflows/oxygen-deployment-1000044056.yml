@@ -39,7 +39,7 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           elif [ -f "$project_dir/yarn.lock" ]; then
             echo "package_manager=yarn" >> "$GITHUB_OUTPUT"
-            if grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@1(\.|")' "$project_file"; then
+            if grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@1(\.[0-9]+)*"' "$project_file"; then
               echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
             elif grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@' "$project_file" || [ -f "$project_dir/.yarnrc.yml" ] || [ -d "$project_dir/.yarn/releases" ]; then
               echo "yarn_install_mode=berry" >> "$GITHUB_OUTPUT"
