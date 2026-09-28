@@ -97,7 +97,18 @@ jobs:
       - name: Build and Publish to Oxygen
         if: steps.storefront.outputs.enabled == 'true'
         working-directory: ${{ steps.storefront.outputs.project_dir }}
-        run: npx shopify hydrogen deploy --force
+        run: |
+          case "${{ steps.storefront.outputs.package_manager }}" in
+            npm)
+              npm exec -- shopify hydrogen deploy --force
+              ;;
+            pnpm)
+              corepack pnpm exec shopify hydrogen deploy --force
+              ;;
+            yarn)
+              corepack yarn shopify hydrogen deploy --force
+              ;;
+          esac
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000044056 }}
 
