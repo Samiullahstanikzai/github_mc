@@ -38,6 +38,13 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           elif [ -f "$project_dir/yarn.lock" ]; then
             echo "package_manager=yarn" >> "$GITHUB_OUTPUT"
+            if grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@1(\.|")' "$project_file"; then
+              echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+            elif grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@' "$project_file" || [ -f "$project_dir/.yarnrc.yml" ] || [ -d "$project_dir/.yarn/releases" ]; then
+              echo "yarn_install_mode=berry" >> "$GITHUB_OUTPUT"
+            else
+              echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+            fi
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -76,13 +83,12 @@ jobs:
               corepack pnpm install --frozen-lockfile
               ;;
             yarn)
-              yarn_version="$(corepack yarn --version)"
-              case "$yarn_version" in
-                1.*)
-                  corepack yarn install --frozen-lockfile
+              case "${{ steps.storefront.outputs.yarn_install_mode }}" in
+                berry)
+                  corepack yarn install --immutable
                   ;;
                 *)
-                  corepack yarn install --immutable
+                  corepack yarn install --frozen-lockfile
                   ;;
               esac
               ;;
