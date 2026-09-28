@@ -32,6 +32,7 @@ jobs:
 
           if [ -f "$project_dir/package-lock.json" ]; then
             echo "package_manager=npm" >> "$GITHUB_OUTPUT"
+            echo "npm_lockfile_hash=$(sha256sum "$project_dir/package-lock.json" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           elif [ -f "$project_dir/pnpm-lock.yaml" ]; then
             echo "package_manager=pnpm" >> "$GITHUB_OUTPUT"
@@ -65,7 +66,7 @@ jobs:
           cache-name: cache-node-modules
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles(format('{0}/package-lock.json', steps.storefront.outputs.project_dir)) }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ steps.storefront.outputs.project_dir }}-${{ steps.storefront.outputs.npm_lockfile_hash }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
             ${{ runner.os }}-build-
