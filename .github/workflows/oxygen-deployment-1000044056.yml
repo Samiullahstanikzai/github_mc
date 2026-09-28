@@ -83,7 +83,7 @@ jobs:
       - name: Build and Publish to Oxygen
         if: steps.storefront.outputs.enabled == 'true'
         working-directory: ${{ steps.storefront.outputs.project_dir }}
-        run: npx shopify hydrogen deploy
+        run: npx shopify hydrogen deploy --force
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000044056 }}
 
