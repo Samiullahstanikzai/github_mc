@@ -16,38 +16,45 @@ jobs:
       - name: Detect Hydrogen storefront
         id: storefront
         run: |
-          project_file="$(
-            find . -path '*/node_modules/*' -prune -o -name package.json -print0 |
-              xargs -0 -r grep -l '"@shopify/hydrogen"' |
-              head -n 1
-          )"
+          found=false
 
-          if [ -z "$project_file" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          project_dir="$(dirname "$project_file")"
-          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
-
-          if [ -f "$project_dir/package-lock.json" ]; then
-            echo "package_manager=npm" >> "$GITHUB_OUTPUT"
-            echo "npm_lockfile_hash=$(sha256sum "$project_dir/package-lock.json" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          elif [ -f "$project_dir/pnpm-lock.yaml" ]; then
-            echo "package_manager=pnpm" >> "$GITHUB_OUTPUT"
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          elif [ -f "$project_dir/yarn.lock" ]; then
-            echo "package_manager=yarn" >> "$GITHUB_OUTPUT"
-            if grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@1(\.[0-9]+)*"' "$project_file"; then
-              echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
-            elif grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@' "$project_file" || [ -f "$project_dir/.yarnrc.yml" ] || [ -d "$project_dir/.yarn/releases" ]; then
-              echo "yarn_install_mode=berry" >> "$GITHUB_OUTPUT"
-            else
-              echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+          while IFS= read -r -d '' project_file; do
+            if ! grep -q '"@shopify/hydrogen"' "$project_file"; then
+              continue
             fi
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
+
+            project_dir="$(dirname "$project_file")"
+
+            if [ -f "$project_dir/package-lock.json" ]; then
+              echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+              echo "package_manager=npm" >> "$GITHUB_OUTPUT"
+              echo "npm_lockfile_hash=$(sha256sum "$project_dir/package-lock.json" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              found=true
+              break
+            elif [ -f "$project_dir/pnpm-lock.yaml" ]; then
+              echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+              echo "package_manager=pnpm" >> "$GITHUB_OUTPUT"
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              found=true
+              break
+            elif [ -f "$project_dir/yarn.lock" ]; then
+              echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+              echo "package_manager=yarn" >> "$GITHUB_OUTPUT"
+              if grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@1(\.[0-9]+)*"' "$project_file"; then
+                echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+              elif grep -Eq '"packageManager"[[:space:]]*:[[:space:]]*"yarn@' "$project_file" || [ -f "$project_dir/.yarnrc.yml" ] || [ -d "$project_dir/.yarn/releases" ]; then
+                echo "yarn_install_mode=berry" >> "$GITHUB_OUTPUT"
+              else
+                echo "yarn_install_mode=classic" >> "$GITHUB_OUTPUT"
+              fi
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              found=true
+              break
+            fi
+          done < <(find . -path '*/node_modules/*' -prune -o -name package.json -print0)
+
+          if [ "$found" != "true" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
